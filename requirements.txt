@@ -1,0 +1,13 @@
+ipykernel
+pandas
+plotly
+matplotlib
+seaborn
+folium
+
+# needed for plotly
+nbformat
+statsmodels
+jupyter-book==1.*
+lxml
+requests
