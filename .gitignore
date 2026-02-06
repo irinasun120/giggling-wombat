@@ -1,0 +1,49 @@
+# =====================
+# macOS
+# =====================
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# =====================
+# Windows
+# =====================
+Thumbs.db
+Desktop.ini
+
+# =====================
+# Python cache / build
+# =====================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# =====================
+# Virtual environments
+# =====================
+.env
+.venv
+venv/
+ENV/
+env/
+
+# =====================
+# Jupyter Notebook
+# =====================
+.ipynb_checkpoints/
+
+# =====================
+# IDE / Editor
+# =====================
+.vscode/
+.idea/
+
+# =====================
+# Logs & misc
+# =====================
+*.log
+
+# =====================
+# Data files (optional – see note below)
+# =====================
+data/
