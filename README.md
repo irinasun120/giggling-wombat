@@ -1,6 +1,10 @@
 ## Project 1 part 1: An Analysis of U.S. Petroleum Product Supplied Data 
 team: giggling wombat
 
+<a target="_blank" href="https://colab.research.google.com/github/advanced-computing/giggling-wombat/blob/main/project.ipynb">
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
+</a>
+
 ### What dataset are you going to use?
 
 Link: https://www.eia.gov/opendata/browser/petroleum/cons/wpsup
