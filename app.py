@@ -3,65 +3,30 @@ import pandas as pd
 import requests
 import streamlit as st
 
-# -----------------------------
-# Page config
-# -----------------------------
-st.set_page_config(page_title="Petroleum Supply vs WTI (EIA)", layout="wide")
-st.title("Correlation between Weekly U.S. Petroleum Product Supplied (Total) and WTI Spot Price")
-st.caption("Source: U.S. Energy Information Administration (EIA API v2). Two datasets pulled from EIA and aligned weekly.")
+st.set_page_config(page_title="Weekly U.S. Petroleum Supply", layout="wide")
+st.title("Weekly U.S. Petroleum Product Supplied (Total)")
+st.caption("Source: U.S. Energy Information Administration (EIA API v2) — petroleum/cons/wpsup (weekly)")
 
 # -----------------------------
-# Sidebar controls
+# API Key (no interaction)
 # -----------------------------
-st.sidebar.header("Controls")
+# Recommended: set in Streamlit Secrets.
+# Create: .streamlit/secrets.toml
+# with:   EIA_API_KEY = "YOUR_KEY"
+EIA_API_KEY = st.secrets.get("EIA_API_KEY", "")
 
-# Local: you can type your key in the sidebar
-# Cloud deploy: you can store it in Streamlit Secrets (EIA_API_KEY)
-default_key = ""
-try:
-    default_key = st.secrets.get("EIA_API_KEY", "")
-except Exception:
-    default_key = ""
-
-EIA_API_KEY = st.sidebar.text_input("EIA API Key", value=default_key, type="password")
-
-rolling_weeks = st.sidebar.slider("Rolling Average (weeks)", 1, 12, 1)
-show_scatter = st.sidebar.checkbox("Show scatter plot", value=True)
-
-default_start = pd.Timestamp("2018-01-01")
-default_end = pd.Timestamp.today().normalize()
-start_date = st.sidebar.date_input("Start date", value=default_start)
-end_date = st.sidebar.date_input("End date", value=default_end)
-
-start_ts = pd.to_datetime(start_date)
-end_ts = pd.to_datetime(end_date)
-
-if start_ts >= end_ts:
-    st.error("Start date must be before end date.")
-    st.stop()
+# For quick local testing ONLY, you can temporarily hardcode:
+# EIA_API_KEY = "YOUR_KEY"
 
 if not EIA_API_KEY:
-    st.warning("Please enter your EIA API key in the sidebar (local) or set it in Streamlit Secrets (deployment).")
+    st.error("Missing EIA API key. Set it in Streamlit Secrets as EIA_API_KEY.")
     st.stop()
 
 # -----------------------------
-# Helper: simple GET with error handling
-# -----------------------------
-def eia_get_json(url: str) -> dict:
-    r = requests.get(url, timeout=30)
-    r.raise_for_status()
-    return r.json()
-
-# -----------------------------
-# Dataset 1: wpsup (ALL products), weekly -> SUM across products by week
+# Load data
 # -----------------------------
 @st.cache_data
-def load_total_petroleum_supply_weekly(api_key: str) -> pd.DataFrame:
-    """
-    Pull weekly petroleum product supplied for ALL products (wpsup).
-    Because multiple products exist per week, we aggregate to a single total per week.
-    We standardize week as W-FRI (week ending Friday) to align datasets.
-    """
+def load_wpsup_all(api_key: str) -> pd.DataFrame:
     url = (
         "https://api.eia.gov/v2/petroleum/cons/wpsup/data/"
         f"?api_key={api_key}"
@@ -72,151 +37,95 @@ def load_total_petroleum_supply_weekly(api_key: str) -> pd.DataFrame:
         "&offset=0"
         "&length=5000"
     )
-
-    js = eia_get_json(url)
+    r = requests.get(url, timeout=30)
+    r.raise_for_status()
+    js = r.json()
     data = js.get("response", {}).get("data", [])
-    df = pd.DataFrame(data)
+    return pd.DataFrame(data)
 
-    if df.empty:
-        return df
+df = load_wpsup_all(EIA_API_KEY)
 
-    df["period"] = pd.to_datetime(df["period"], errors="coerce")
-    df["value"] = pd.to_numeric(df["value"], errors="coerce")
-    df = df.dropna(subset=["period", "value"])
+if df.empty:
+    st.error("No data returned from EIA. Check your API key or endpoint.")
+    st.stop()
 
-    # Standardize to a weekly key (week ending Friday)
-    df["week"] = df["period"].dt.to_period("W-FRI").dt.end_time.dt.normalize()
+# -----------------------------
+# Clean + aggregate
+# -----------------------------
+df["period"] = pd.to_datetime(df["period"], errors="coerce")
+df["value"] = pd.to_numeric(df["value"], errors="coerce")
+df = df.dropna(subset=["period", "value"])
 
-    # Aggregate ALL products to a single total per week
-    total = (
-        df.groupby("week", as_index=False)["value"]
-          .sum()
-          .rename(columns={"value": "total_petroleum_supply"})
-          .sort_values("week")
+# Standardize week to "week ending Friday" (stable weekly key)
+df["week"] = df["period"].dt.to_period("W-FRI").dt.end_time.dt.normalize()
+
+# Total across ALL products per week
+weekly_total = (
+    df.groupby("week", as_index=False)["value"]
+      .sum()
+      .rename(columns={"value": "total_product_supplied"})
+      .sort_values("week")
+)
+
+# Latest week snapshot: top products by value
+latest_week = df["week"].max()
+latest_snapshot = df[df["week"] == latest_week].copy()
+
+# Some EIA rows include product-name; fallback if missing
+name_col = "product-name" if "product-name" in latest_snapshot.columns else None
+if name_col:
+    latest_by_product = (
+        latest_snapshot.groupby(name_col, as_index=False)["value"]
+        .sum()
+        .sort_values("value", ascending=False)
+        .head(10)
     )
-    return total
-
-# -----------------------------
-# Dataset 2: WTI spot price (RWTC), weekly -> MEAN by week (just in case)
-# -----------------------------
-@st.cache_data
-def load_wti_spot_price_weekly(api_key: str) -> pd.DataFrame:
-    """
-    Pull weekly WTI spot price series RWTC (Cushing, OK WTI Spot Price FOB).
-    Standardize week as W-FRI to align datasets.
-    """
-    url = (
-        "https://api.eia.gov/v2/petroleum/pri/spt/data/"
-        f"?api_key={api_key}"
-        "&frequency=weekly"
-        "&data[0]=value"
-        "&facets[series][]=RWTC"
-        "&sort[0][column]=period"
-        "&sort[0][direction]=asc"
-        "&offset=0"
-        "&length=5000"
-    )
-
-    js = eia_get_json(url)
-    data = js.get("response", {}).get("data", [])
-    df = pd.DataFrame(data)
-
-    if df.empty:
-        return df
-
-    df["period"] = pd.to_datetime(df["period"], errors="coerce")
-    df["value"] = pd.to_numeric(df["value"], errors="coerce")
-    df = df.dropna(subset=["period", "value"])
-
-    # Standardize to weekly key (week ending Friday)
-    df["week"] = df["period"].dt.to_period("W-FRI").dt.end_time.dt.normalize()
-
-    wti = (
-        df.groupby("week", as_index=False)["value"]
-          .mean()
-          .rename(columns={"value": "wti_usd_per_bbl"})
-          .sort_values("week")
-    )
-    return wti
-
-# -----------------------------
-# Load data
-# -----------------------------
-try:
-    supply = load_total_petroleum_supply_weekly(EIA_API_KEY)
-    wti = load_wti_spot_price_weekly(EIA_API_KEY)
-except requests.HTTPError as e:
-    st.error(f"API request failed: {e}")
-    st.stop()
-except Exception as e:
-    st.error(f"Unexpected error while loading data: {e}")
-    st.stop()
-
-if supply.empty:
-    st.error("Supply dataset returned no rows. Check your API key or the endpoint.")
-    st.stop()
-
-if wti.empty:
-    st.error("WTI dataset returned no rows. Check your API key or the endpoint.")
-    st.stop()
-
-# Filter by selected dates (using week)
-supply = supply[(supply["week"] >= start_ts) & (supply["week"] <= end_ts)].copy()
-wti = wti[(wti["week"] >= start_ts) & (wti["week"] <= end_ts)].copy()
-
-# Merge on standardized weekly key
-merged = pd.merge(supply, wti, on="week", how="inner").sort_values("week")
-
-if merged.empty:
-    st.warning("No overlapping weeks after matching. Expand the date range or verify data availability.")
-    st.stop()
-
-# Rolling averages
-if rolling_weeks > 1:
-    merged["supply_ra"] = merged["total_petroleum_supply"].rolling(rolling_weeks).mean()
-    merged["wti_ra"] = merged["wti_usd_per_bbl"].rolling(rolling_weeks).mean()
 else:
-    merged["supply_ra"] = merged["total_petroleum_supply"]
-    merged["wti_ra"] = merged["wti_usd_per_bbl"]
+    # If no product-name column exists, use product code instead
+    latest_by_product = (
+        latest_snapshot.groupby("product", as_index=False)["value"]
+        .sum()
+        .sort_values("value", ascending=False)
+        .head(10)
+    )
 
 # -----------------------------
-# Metrics
+# Metrics (static)
 # -----------------------------
-c1, c2, c3 = st.columns(3)
-c1.metric("Latest Total Product Supplied", f"{merged['total_petroleum_supply'].iloc[-1]:,.0f}")
-c2.metric("Latest WTI (USD/bbl)", f"{merged['wti_usd_per_bbl'].iloc[-1]:.2f}")
-corr = merged[["total_petroleum_supply", "wti_usd_per_bbl"]].corr().iloc[0, 1]
-c3.metric("Correlation", f"{corr:.2f}")
+c1, c2 = st.columns(2)
+c1.metric("Weeks in dataset", f"{weekly_total.shape[0]:,}")
+c2.metric("Latest total (sum of products)", f"{weekly_total['total_product_supplied'].iloc[-1]:,.0f}")
 
 st.markdown("---")
 
 # -----------------------------
-# Plot: Dual axis time series
+# Visualization 1: weekly total line
 # -----------------------------
-st.subheader("Weekly Trends (Aligned to Week Ending Friday)")
+st.subheader("Total Product Supplied (Weekly, All Products Summed)")
 
-fig, ax1 = plt.subplots()
-ax1.plot(merged["week"], merged["supply_ra"], label="Total Product Supplied")
+fig1, ax1 = plt.subplots()
+ax1.plot(weekly_total["week"], weekly_total["total_product_supplied"])
 ax1.set_xlabel("Week")
-ax1.set_ylabel("Total Product Supplied (sum of values)")
-
-ax2 = ax1.twinx()
-ax2.plot(merged["week"], merged["wti_ra"], label="WTI Spot Price (USD/bbl)")
-ax2.set_ylabel("WTI (USD per barrel)")
-
-lines1, labels1 = ax1.get_legend_handles_labels()
-lines2, labels2 = ax2.get_legend_handles_labels()
-ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper left")
-
-st.pyplot(fig)
-
-
-# -----------------------------
-# Data preview / debugging
-# -----------------------------
-with st.expander("Show merged data"):
-    st.dataframe(merged)
+ax1.set_ylabel("Total Product Supplied (sum of EIA 'value')")
+st.pyplot(fig1)
 
 st.markdown("---")
-st.caption("Note: 'Product supplied' is commonly used as a proxy for petroleum product demand. This app explores association, not causation.")
-st.caption("Team Members: Add names here")
+
+# -----------------------------
+# Visualization 2: top products in latest week (bar)
+# -----------------------------
+st.subheader(f"Top 10 Products by Product Supplied — Week Ending {latest_week.date()}")
+
+fig2, ax2 = plt.subplots()
+ax2.barh(latest_by_product.iloc[::-1, 0], latest_by_product.iloc[::-1, 1])
+ax2.set_xlabel("Product Supplied (value)")
+ax2.set_ylabel("Product")
+st.pyplot(fig2)
+
+with st.expander("Show raw aggregated tables"):
+    st.write("Weekly total:")
+    st.dataframe(weekly_total)
+    st.write(f"Latest week snapshot (top 10):")
+    st.dataframe(latest_by_product)
+
+st.caption("Note: 'Product supplied' is often used as a proxy for consumption. This visualization is descriptive (not causal).")

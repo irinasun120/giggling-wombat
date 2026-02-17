@@ -47,3 +47,5 @@ env/
 # Data files (optional – see note below)
 # =====================
 data/
+
+.streamlit/secrets.toml
