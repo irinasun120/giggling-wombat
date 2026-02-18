@@ -11,3 +11,4 @@ statsmodels
 jupyter-book==1.*
 lxml
 requests
+streamlit
