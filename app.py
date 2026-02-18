@@ -4,8 +4,8 @@ import requests
 import streamlit as st
 
 st.set_page_config(page_title="Weekly U.S. Petroleum Supply", layout="wide")
-st.title("Weekly U.S. Petroleum Product Supplied (Total)")
-st.caption("Source: U.S. Energy Information Administration (EIA API v2) — petroleum/cons/wpsup (weekly)")
+st.title("The Corelation between Weekly U.S. Petroleum Product Supplied and WTI Crude Oil Price")
+st.caption("Source: U.S. Energy Information Administration")
 
 # -----------------------------
 # API Key (no interaction)
@@ -33,7 +33,7 @@ def load_wpsup_all(api_key: str) -> pd.DataFrame:
         "&frequency=weekly"
         "&data[0]=value"
         "&sort[0][column]=period"
-        "&sort[0][direction]=asc"
+        "&sort[0][direction]=desc"
         "&offset=0"
         "&length=5000"
     )
@@ -112,20 +112,6 @@ st.pyplot(fig1)
 st.markdown("---")
 
 # -----------------------------
-# Visualization 2: top products in latest week (bar)
-# -----------------------------
-st.subheader(f"Top 10 Products by Product Supplied — Week Ending {latest_week.date()}")
-
-fig2, ax2 = plt.subplots()
-ax2.barh(latest_by_product.iloc[::-1, 0], latest_by_product.iloc[::-1, 1])
-ax2.set_xlabel("Product Supplied (value)")
-ax2.set_ylabel("Product")
-st.pyplot(fig2)
-
-with st.expander("Show raw aggregated tables"):
-    st.write("Weekly total:")
-    st.dataframe(weekly_total)
-    st.write(f"Latest week snapshot (top 10):")
-    st.dataframe(latest_by_product)
 
 st.caption("Note: 'Product supplied' is often used as a proxy for consumption. This visualization is descriptive (not causal).")
+
