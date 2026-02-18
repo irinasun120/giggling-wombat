@@ -10,5 +10,7 @@ nbformat
 statsmodels
 jupyter-book==1.*
 lxml
+streamlit==1.54.0
+numpy
 requests
-streamlit
+altair==4.2.2
