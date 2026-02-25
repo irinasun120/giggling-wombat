@@ -1,118 +1,99 @@
 import matplotlib.pyplot as plt
-import pandas as pd
 import requests
 import streamlit as st
 
+from tests.eia_part3 import (
+    build_df_from_eia_data,
+    filter_since,
+    latest_value,
+    sum_by_week,
+)
+
 st.set_page_config(page_title="Weekly U.S. Petroleum Supply", layout="wide")
-st.title("The Corelation between Weekly U.S. Petroleum Product Supplied and WTI Crude Oil Price")
+st.title("The Correlation between Weekly U.S. Petroleum Product Supplied and WTI Crude Oil Price")
 st.subheader("Team Members: Irina, Indra")
-st.caption("Source: U.S. Energy Information Administration")
+st.caption("Source: U.S. Energy Information Administration (EIA)")
 
-# -----------------------------
-# API Key (no interaction)
-# -----------------------------
-# Recommended: set in Streamlit Secrets.
-# Create: .streamlit/secrets.toml
-# with:   EIA_API_KEY = "YOUR_KEY"
-EIA_API_KEY = st.secrets.get("EIA_API_KEY", "")
-
-# For quick local testing ONLY, you can temporarily hardcode:
-# EIA_API_KEY = "YOUR_KEY"
-
-if not EIA_API_KEY:
+API_KEY = st.secrets.get("EIA_API_KEY", None)
+if not API_KEY:
     st.error("Missing EIA API key. Set it in Streamlit Secrets as EIA_API_KEY.")
     st.stop()
 
-# -----------------------------
-# Load data
-# -----------------------------
-@st.cache_data
-def load_wpsup_all(api_key: str) -> pd.DataFrame:
-    url = (
-        "https://api.eia.gov/v2/petroleum/cons/wpsup/data/"
-        f"?api_key={api_key}"
-        "&frequency=weekly"
-        "&data[0]=value"
-        "&sort[0][column]=period"
-        "&sort[0][direction]=desc"
-        "&offset=0"
-        "&length=5000"
-    )
-    r = requests.get(url, timeout=30)
-    r.raise_for_status()
-    js = r.json()
-    data = js.get("response", {}).get("data", [])
-    return pd.DataFrame(data)
-
-df = load_wpsup_all(EIA_API_KEY)
-
-if df.empty:
-    st.error("No data returned from EIA. Check your API key or endpoint.")
-    st.stop()
-
-# -----------------------------
-# Clean + aggregate
-# -----------------------------
-df["period"] = pd.to_datetime(df["period"], errors="coerce")
-df["value"] = pd.to_numeric(df["value"], errors="coerce")
-df = df.dropna(subset=["period", "value"])
-
-# Standardize week to "week ending Friday" (stable weekly key)
-df["week"] = df["period"].dt.to_period("W-FRI").dt.end_time.dt.normalize()
-
-# Total across ALL products per week
-weekly_total = (
-    df.groupby("week", as_index=False)["value"]
-      .sum()
-      .rename(columns={"value": "total_product_supplied"})
-      .sort_values("week")
+# --- API endpoint (supply) ---
+SUPPLY_URL = (
+    "https://api.eia.gov/v2/petroleum/cons/wpsup/data/"
+    f"?api_key={API_KEY}"
+    "&frequency=weekly"
+    "&data[0]=value"
+    "&sort[0][column]=period"
+    "&sort[0][direction]=desc"
+    "&offset=0&length=5000"
 )
 
-# Latest week snapshot: top products by value
-latest_week = df["week"].max()
-latest_snapshot = df[df["week"] == latest_week].copy()
+@st.cache_data(ttl=60 * 60)  # cache 1 hour
+def fetch_supply_json(url: str) -> dict:
+    r = requests.get(url, timeout=30)
+    r.raise_for_status()
+    return r.json()
 
-# Some EIA rows include product-name; fallback if missing
-name_col = "product-name" if "product-name" in latest_snapshot.columns else None
-if name_col:
-    latest_by_product = (
-        latest_snapshot.groupby(name_col, as_index=False)["value"]
-        .sum()
-        .sort_values("value", ascending=False)
-        .head(10)
-    )
-else:
-    # If no product-name column exists, use product code instead
-    latest_by_product = (
-        latest_snapshot.groupby("product", as_index=False)["value"]
-        .sum()
-        .sort_values("value", ascending=False)
-        .head(10)
-    )
+try:
+    payload = fetch_supply_json(SUPPLY_URL)
+except Exception as e:
+    st.error(f"Failed to fetch supply data: {e}")
+    st.stop()
 
-# -----------------------------
-# Metrics (static)
-# -----------------------------
+# IMPORTANT: build_df_from_eia_data expects list[dict], not the whole payload
+data = payload.get("response", {}).get("data", [])
+df = build_df_from_eia_data(
+    data=data,
+    period_col="period",
+    value_col="value",
+    new_date_col="week",
+)
+
+if df.empty:
+    st.error("EIA returned no usable data for supply (empty after parsing).")
+    st.stop()
+
+# Filter (2012–present)
+df = filter_since(df, date_col="week", start_date="2012-01-01")
+if df.empty:
+    st.error("No data after filtering to 2012–present. Check parsing or EIA response.")
+    st.stop()
+
+# Aggregate weekly (safe even if already weekly)
+weekly_total = sum_by_week(df, date_col="week", value_col="value")
+
+# Optional: rename for readability in plots/table
+weekly_total = weekly_total.rename(columns={"value": "total_product_supplied"})
+
+# Latest value
+try:
+    latest_total = latest_value(weekly_total, date_col="week", value_col="total_product_supplied")
+except Exception:
+    latest_total = None
+
+# Metrics
 c1, c2 = st.columns(2)
-c1.metric("Weeks in dataset", f"{weekly_total.shape[0]:,}")
-c2.metric("Latest total (sum of products)", f"{weekly_total['total_product_supplied'].iloc[-1]:,.0f}")
+c1.metric("Weeks in dataset (2012–present)", f"{weekly_total.shape[0]:,}")
+c2.metric("Latest total (sum of products)", f"{latest_total:,.0f}" if latest_total is not None else "—")
 
-st.markdown("---")
-
-# -----------------------------
-# Visualization 1: weekly total line
-# -----------------------------
+st.divider()
 st.subheader("Total Product Supplied (Weekly, All Products Summed)")
 
-fig1, ax1 = plt.subplots()
-ax1.plot(weekly_total["week"], weekly_total["total_product_supplied"])
-ax1.set_xlabel("Week")
-ax1.set_ylabel("Total Product Supplied (sum of EIA 'value')")
-st.pyplot(fig1)
+fig, ax = plt.subplots()
+ax.plot(weekly_total["week"], weekly_total["total_product_supplied"])
+ax.set_xlabel("Week")
+ax.set_ylabel("Total Product Supplied (sum of EIA 'value')")
+st.pyplot(fig)
 
-st.markdown("---")
+with st.expander("Show data table"):
+    st.dataframe(
+        weekly_total.sort_values("week", ascending=False),
+        use_container_width=True,
+    )
 
-# -----------------------------
-
-st.caption("Note: 'Product supplied' is often used as a proxy for consumption. This visualization is descriptive (not causal).")
-
+st.caption(
+    "Note: 'Product supplied' is often used as a proxy for consumption. "
+    "This visualization is descriptive (not causal)."
+)
