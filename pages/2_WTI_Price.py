@@ -1,23 +1,23 @@
-from datetime import datetime
-
 import matplotlib.pyplot as plt
-import pandas as pd
 import requests
 import streamlit as st
 
+from tests.eia_part3 import (
+    build_df_from_eia_data,
+    filter_since,
+    latest_value,
+    sum_by_week,
+)
+
 st.set_page_config(page_title="WTI Price", layout="wide")
-
 st.title("WTI Crude Oil Price")
-st.caption("Source: U.S. Energy Information Administration")
+st.caption("Source: U.S. Energy Information Administration (EIA)")
 
-# Get API key
-try:
-    API_KEY = st.secrets["EIA_API_KEY"]
-except:
+API_KEY = st.secrets.get("EIA_API_KEY", None)
+if not API_KEY:
     st.error("Missing EIA API key. Set it in Streamlit Secrets as EIA_API_KEY.")
     st.stop()
 
-# EIA WTI API
 URL = (
     "https://api.eia.gov/v2/petroleum/pri/spt/data/"
     f"?api_key={API_KEY}"
@@ -29,42 +29,61 @@ URL = (
     "&offset=0&length=5000"
 )
 
-response = requests.get(URL)
-data_json = response.json()
+@st.cache_data(ttl=60 * 60)
+def fetch_wti_json(url: str) -> dict:
+    r = requests.get(url, timeout=30)
+    r.raise_for_status()
+    return r.json()
 
-if "response" not in data_json:
-    st.error("Error fetching data from EIA.")
+try:
+    payload = fetch_wti_json(URL)
+except Exception as e:
+    st.error(f"Failed to fetch WTI data: {e}")
     st.stop()
 
-data = data_json["response"]["data"]
-
-df = pd.DataFrame(data)
+# IMPORTANT: build_df_from_eia_data expects list[dict]
+data = payload.get("response", {}).get("data", [])
+df = build_df_from_eia_data(
+    data=data,
+    period_col="period",
+    value_col="value",
+    new_date_col="week",
+)
 
 if df.empty:
-    st.error("No data returned.")
+    st.error("EIA returned no usable data for WTI (empty after parsing).")
     st.stop()
 
-# Convert date
-df["week"] = pd.to_datetime(df["period"], errors="coerce")
-df["value"] = pd.to_numeric(df["value"], errors="coerce")
-
-df = df.dropna()
-
-# Filter 2012-present
-df = df[df["week"] >= pd.to_datetime("2012-01-01")]
-
+# Filter to 2012–present
+df = filter_since(df, date_col="week", start_date="2012-01-01")
 if df.empty:
-    st.error("No data after filtering.")
+    st.error("No WTI data after filtering to 2012–present. Check parsing or EIA response.")
     st.stop()
 
-st.metric("Latest WTI Price ($/barrel)", f"{df['value'].iloc[-1]:,.2f}")
+# Aggregate weekly (safe even if already weekly)
+weekly_wti = sum_by_week(df, date_col="week", value_col="value").rename(columns={"value": "wti_price"})
 
-# Plot
-fig, ax = plt.subplots(figsize=(12, 6))
-ax.plot(df["week"], df["value"])
-ax.set_title("WTI Crude Oil Spot Price (Weekly)")
-ax.set_xlabel("Year")
-ax.set_ylabel("Price ($/barrel)")
-ax.grid(True)
+# Latest price
+try:
+    latest_price = latest_value(weekly_wti, date_col="week", value_col="wti_price")
+except Exception:
+    latest_price = None
 
+c1, c2 = st.columns(2)
+c1.metric("Weeks in dataset (2012–present)", f"{weekly_wti.shape[0]:,}")
+c2.metric("Latest WTI ($/barrel)", f"{latest_price:,.2f}" if latest_price is not None else "—")
+
+st.divider()
+st.subheader("WTI Price Over Time (Weekly)")
+
+fig, ax = plt.subplots()
+ax.plot(weekly_wti["week"], weekly_wti["wti_price"])
+ax.set_xlabel("Week")
+ax.set_ylabel("WTI price ($/barrel)")
 st.pyplot(fig)
+
+with st.expander("Show data table"):
+    st.dataframe(
+        weekly_wti.sort_values("week", ascending=False),
+        use_container_width=True,
+    )
