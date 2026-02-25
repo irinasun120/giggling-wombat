@@ -59,3 +59,38 @@ def sum_by_week(df: pd.DataFrame, date_col: str, value_col: str) -> pd.DataFrame
         .reset_index(drop=True)
     )
     return out
+
+def validate_required_columns(df: pd.DataFrame, required_cols: list[str]) -> None:
+    """Raise ValueError if any required column is missing."""
+    missing = [c for c in required_cols if c not in df.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {missing}")
+
+
+def add_week_ending_friday_column(
+    df: pd.DataFrame,
+    date_col: str = "week",
+    new_col: str = "week_ending",
+) -> pd.DataFrame:
+    """
+    Create a stable weekly key: week ending Friday (normalized midnight),
+    based on an existing datetime column (date_col).
+    """
+    if df.empty:
+        return df
+    out = df.copy()
+    out[new_col] = out[date_col].dt.to_period("W-FRI").dt.end_time.dt.normalize()
+    return out
+
+
+def coerce_numeric_and_dropna(
+    df: pd.DataFrame,
+    value_col: str = "value",
+) -> pd.DataFrame:
+    """Coerce value_col to numeric and drop rows where it becomes NaN."""
+    if df.empty:
+        return df
+    out = df.copy()
+    out[value_col] = pd.to_numeric(out[value_col], errors="coerce")
+    out = out.dropna(subset=[value_col]).copy()
+    return out 

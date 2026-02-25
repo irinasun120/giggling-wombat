@@ -6,6 +6,9 @@ from tests.eia_part3 import (
     filter_since,
     latest_value,
     sum_by_week,
+    validate_required_columns,
+    add_week_ending_friday_column,
+    coerce_numeric_and_dropna,
 )
 
 
@@ -70,3 +73,30 @@ def test_sum_by_week_sums_duplicates():
     assert len(out) == 2
     assert out.loc[out["week"] == pd.to_datetime("2012-01-06"), "value"].iloc[0] == 17
     assert out.loc[out["week"] == pd.to_datetime("2012-01-13"), "value"].iloc[0] == 3
+
+def test_validate_required_columns_passes_when_present():
+    df = pd.DataFrame({"week": [pd.to_datetime("2012-01-06")], "value": [1]})
+    validate_required_columns(df, ["week", "value"])  # should not raise
+
+
+def test_validate_required_columns_raises_when_missing():
+    df = pd.DataFrame({"week": [pd.to_datetime("2012-01-06")]})
+    with pytest.raises(ValueError):
+        validate_required_columns(df, ["week", "value"])
+
+
+def test_add_week_ending_friday_column_creates_expected_week_ending():
+    # Pick a date that is not Friday to make the test obvious
+    df = pd.DataFrame({"week": pd.to_datetime(["2012-01-03"])})  # Tuesday
+    out = add_week_ending_friday_column(df, date_col="week", new_col="week_ending")
+
+    # Week ending Friday should be 2012-01-06 at midnight
+    assert out["week_ending"].iloc[0] == pd.Timestamp("2012-01-06")
+
+
+def test_coerce_numeric_and_dropna_drops_invalid_values():
+    df = pd.DataFrame({"value": ["10", "not-a-number", None]})
+    out = coerce_numeric_and_dropna(df, value_col="value")
+
+    assert len(out) == 1
+    assert out["value"].iloc[0] == 10
