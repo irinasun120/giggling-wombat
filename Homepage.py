@@ -1,7 +1,6 @@
 import matplotlib.pyplot as plt
 import requests
 import streamlit as st
-from validation import eia_schema
 
 from tests.eia_part3 import (
     build_df_from_eia_data,
@@ -9,6 +8,7 @@ from tests.eia_part3 import (
     latest_value,
     sum_by_week,
 )
+from validation import eia_schema
 
 st.set_page_config(page_title="Weekly U.S. Petroleum Supply", layout="wide")
 st.title("The Correlation between Weekly U.S. Petroleum Product Supplied and WTI Crude Oil Price")

@@ -15,4 +15,3 @@ def test_schema_rejects_negative_values():
 
     with pytest.raises(pa.errors.SchemaError):
         eia_schema.validate(df)
-
