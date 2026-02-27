@@ -2,13 +2,13 @@ import pandas as pd
 import pytest
 
 from tests.eia_part3 import (
+    add_week_ending_friday_column,
     build_df_from_eia_data,
+    coerce_numeric_and_dropna,
     filter_since,
     latest_value,
     sum_by_week,
     validate_required_columns,
-    add_week_ending_friday_column,
-    coerce_numeric_and_dropna,
 )
 
 
