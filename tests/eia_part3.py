@@ -93,4 +93,4 @@ def coerce_numeric_and_dropna(
     out = df.copy()
     out[value_col] = pd.to_numeric(out[value_col], errors="coerce")
     out = out.dropna(subset=[value_col]).copy()
-    return out 
+    return out

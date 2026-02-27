@@ -76,8 +76,10 @@ except Exception:
 # Metrics
 c1, c2 = st.columns(2)
 c1.metric("Weeks in dataset (2012–present)", f"{weekly_total.shape[0]:,}")
-c2.metric("Latest total (sum of products)", f"{latest_total:,.0f}" if latest_total is not None else "—")
-
+c2.metric(
+    "Latest total (sum of products)",
+    f"{latest_total:,.0f}" if latest_total is not None else "—",
+)
 st.divider()
 st.subheader("Total Product Supplied (Weekly, All Products Summed)")
 
