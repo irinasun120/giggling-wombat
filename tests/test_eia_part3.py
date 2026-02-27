@@ -1,7 +1,6 @@
 import pandas as pd
 import pytest
-
-from tests.eia_part3 import (
+from eia_part3 import (
     add_week_ending_friday_column,
     build_df_from_eia_data,
     coerce_numeric_and_dropna,
@@ -10,6 +9,15 @@ from tests.eia_part3 import (
     sum_by_week,
     validate_required_columns,
 )
+
+# Constants used in tests to satisfy Ruff PLR2004 (no "magic numbers" in comparisons)
+EXPECTED_FIRST_VALUE = 100
+EXPECTED_FILTERED_VALUE = 2
+EXPECTED_LATEST_VALUE = 500.0
+EXPECTED_WEEK_COUNT = 2
+EXPECTED_WEEK1_SUM = 17
+EXPECTED_WEEK2_SUM = 3
+EXPECTED_SINGLE_VALUE = 10
 
 
 def test_build_df_from_eia_data_parses_and_drops_bad_rows():
@@ -26,7 +34,7 @@ def test_build_df_from_eia_data_parses_and_drops_bad_rows():
     assert pd.api.types.is_datetime64_any_dtype(df["week"])
     assert pd.api.types.is_numeric_dtype(df["value"])
     assert df["week"].iloc[0] == pd.to_datetime("2012-01-06")
-    assert df["value"].iloc[0] == 100
+    assert df["value"].iloc[0] == EXPECTED_FIRST_VALUE
 
 
 def test_filter_since_keeps_2012_and_after():
@@ -39,7 +47,7 @@ def test_filter_since_keeps_2012_and_after():
 
     assert len(df2) == 1
     assert df2["week"].iloc[0] == pd.to_datetime("2012-01-06")
-    assert df2["value"].iloc[0] == 2
+    assert df2["value"].iloc[0] == EXPECTED_FILTERED_VALUE
 
 
 def test_latest_value_returns_value_of_most_recent_date_even_if_unsorted():
@@ -52,7 +60,7 @@ def test_latest_value_returns_value_of_most_recent_date_even_if_unsorted():
     df = build_df_from_eia_data(data)
     v = latest_value(df, date_col="week", value_col="value")
 
-    assert v == 500.0
+    assert v == EXPECTED_LATEST_VALUE
 
 
 def test_latest_value_raises_on_empty_df():
@@ -70,9 +78,14 @@ def test_sum_by_week_sums_duplicates():
     out = sum_by_week(df, date_col="week", value_col="value")
 
     assert list(out.columns) == ["week", "value"]
-    assert len(out) == 2
-    assert out.loc[out["week"] == pd.to_datetime("2012-01-06"), "value"].iloc[0] == 17
-    assert out.loc[out["week"] == pd.to_datetime("2012-01-13"), "value"].iloc[0] == 3
+    assert len(out) == EXPECTED_WEEK_COUNT
+    assert (
+        out.loc[out["week"] == pd.to_datetime("2012-01-06"), "value"].iloc[0] == EXPECTED_WEEK1_SUM
+    )
+    assert (
+        out.loc[out["week"] == pd.to_datetime("2012-01-13"), "value"].iloc[0] == EXPECTED_WEEK2_SUM
+    )
+
 
 def test_validate_required_columns_passes_when_present():
     df = pd.DataFrame({"week": [pd.to_datetime("2012-01-06")], "value": [1]})
@@ -99,4 +112,4 @@ def test_coerce_numeric_and_dropna_drops_invalid_values():
     out = coerce_numeric_and_dropna(df, value_col="value")
 
     assert len(out) == 1
-    assert out["value"].iloc[0] == 10
+    assert out["value"].iloc[0] == EXPECTED_SINGLE_VALUE

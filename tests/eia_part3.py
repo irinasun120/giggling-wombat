@@ -60,6 +60,7 @@ def sum_by_week(df: pd.DataFrame, date_col: str, value_col: str) -> pd.DataFrame
     )
     return out
 
+
 def validate_required_columns(df: pd.DataFrame, required_cols: list[str]) -> None:
     """Raise ValueError if any required column is missing."""
     missing = [c for c in required_cols if c not in df.columns]
