@@ -30,11 +30,13 @@ SUPPLY_URL = (
     "&offset=0&length=5000"
 )
 
+
 @st.cache_data(ttl=60 * 60)  # cache 1 hour
 def fetch_supply_json(url: str) -> dict:
     r = requests.get(url, timeout=30)
     r.raise_for_status()
     return r.json()
+
 
 try:
     payload = fetch_supply_json(SUPPLY_URL)

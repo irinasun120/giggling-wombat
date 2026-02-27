@@ -80,12 +80,10 @@ def test_sum_by_week_sums_duplicates():
     assert list(out.columns) == ["week", "value"]
     assert len(out) == EXPECTED_WEEK_COUNT
     assert (
-        out.loc[out["week"] == pd.to_datetime("2012-01-06"), "value"].iloc[0]
-        == EXPECTED_WEEK1_SUM
+        out.loc[out["week"] == pd.to_datetime("2012-01-06"), "value"].iloc[0] == EXPECTED_WEEK1_SUM
     )
     assert (
-        out.loc[out["week"] == pd.to_datetime("2012-01-13"), "value"].iloc[0]
-        == EXPECTED_WEEK2_SUM
+        out.loc[out["week"] == pd.to_datetime("2012-01-13"), "value"].iloc[0] == EXPECTED_WEEK2_SUM
     )
 
 

@@ -29,11 +29,13 @@ URL = (
     "&offset=0&length=5000"
 )
 
+
 @st.cache_data(ttl=60 * 60)
 def fetch_wti_json(url: str) -> dict:
     r = requests.get(url, timeout=30)
     r.raise_for_status()
     return r.json()
+
 
 try:
     payload = fetch_wti_json(URL)
@@ -61,9 +63,8 @@ if df.empty:
     st.stop()
 
 # Aggregate weekly (safe even if already weekly)
-weekly_wti = (
-    sum_by_week(df, date_col="week", value_col="value")
-    .rename(columns={"value": "wti_price"})
+weekly_wti = sum_by_week(df, date_col="week", value_col="value").rename(
+    columns={"value": "wti_price"}
 )
 
 # Latest price
