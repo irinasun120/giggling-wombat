@@ -1,13 +1,13 @@
 import matplotlib.pyplot as plt
 import requests
 import streamlit as st
-from tests_eia_part3 import (
+
+from tests.eia_part3 import (
     build_df_from_eia_data,
     filter_since,
     latest_value,
     sum_by_week,
 )
-
 from validation import eia_schema
 
 st.set_page_config(page_title="Weekly U.S. Petroleum Supply", layout="wide")
