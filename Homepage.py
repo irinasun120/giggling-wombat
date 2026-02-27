@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import requests
 import streamlit as st
+from validation import eia_schema
 
 from tests.eia_part3 import (
     build_df_from_eia_data,
@@ -59,8 +60,6 @@ if df.empty:
 
 # Filter (2012–present)
 df = filter_since(df, date_col="week", start_date="2012-01-01")
-from tests.validation import eia_schema
-
 df = eia_schema.validate(df)
 
 weekly_total = sum_by_week(df, date_col="week", value_col="value")
