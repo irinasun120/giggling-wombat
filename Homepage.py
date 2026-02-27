@@ -8,6 +8,7 @@ from tests.eia_part3 import (
     latest_value,
     sum_by_week,
 )
+from validation import eia_schema
 
 st.set_page_config(page_title="Weekly U.S. Petroleum Supply", layout="wide")
 st.title("The Correlation between Weekly U.S. Petroleum Product Supplied and WTI Crude Oil Price")
@@ -59,6 +60,9 @@ if df.empty:
 
 # Filter (2012–present)
 df = filter_since(df, date_col="week", start_date="2012-01-01")
+df = eia_schema.validate(df)
+
+weekly_total = sum_by_week(df, date_col="week", value_col="value")
 if df.empty:
     st.error("No data after filtering to 2012–present. Check parsing or EIA response.")
     st.stop()

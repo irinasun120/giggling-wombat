@@ -16,3 +16,4 @@ requests
 altair==4.2.2
 pytest
 pytest-cov
+pandera
