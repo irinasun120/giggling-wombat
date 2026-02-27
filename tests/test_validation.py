@@ -2,7 +2,7 @@ import pandas as pd
 import pandera as pa
 import pytest
 
-from validation import eia_schema
+from validation1 import eia_schema
 
 
 def test_schema_rejects_negative_values():
