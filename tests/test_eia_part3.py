@@ -1,7 +1,6 @@
 import pandas as pd
 import pytest
-
-from tests.eia_part3 import (
+from eia_part3 import (
     add_week_ending_friday_column,
     build_df_from_eia_data,
     coerce_numeric_and_dropna,
