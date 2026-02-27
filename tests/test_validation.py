@@ -1,7 +1,6 @@
 import pandas as pd
 import pytest
-
-from tests.validation import eia_schema
+from validation import eia_schema
 
 
 def test_schema_rejects_negative_values():
